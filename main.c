@@ -11,8 +11,7 @@
 
 #include "threadpool.h"
 
-#define MAX_FILE_NAME_SIZE 256
-
+tpool_t *tm;
 static const size_t num_threads = 20;
 
 void worker(void *arg)
@@ -27,8 +26,13 @@ void worker(void *arg)
         usleep(100000);
 }
 
-void read_directory(const char *path)
+// arg needs to be a heap allocated variable as it will be freed
+void read_directory(void *arg)
 {
+    char *path = (char *)malloc(strlen((char *)arg) * sizeof(char));
+    strcpy(path, (char *)arg);
+    free(arg);
+
     DIR *directory = opendir(path);
     if (directory == NULL)
     {
@@ -62,7 +66,9 @@ void read_directory(const char *path)
         {
             printf("Directory: %s\n", full_path);
 
-            read_directory(full_path);
+            char *p = (char *)malloc(1024 * sizeof(char));
+            strcpy(p, full_path);
+            tpool_add_work(tm, read_directory, p);
         }
         else
         {
@@ -70,34 +76,22 @@ void read_directory(const char *path)
         }
     }
 
+    free(path);
     closedir(directory);
 }
 
 int main()
 {
     // initialize threadpool
-    // tpool_t *tm = tpool_create(num_threads);
+    tm = tpool_create(num_threads);
 
-    read_directory("/mnt/d/Development/Languages/C/FileCompression");
+    char *path = (char *)malloc(1024 * sizeof(char));
+    strcpy(path, "/mnt/d/Development/Languages/C/FileCompression");
 
-    /*
-        for (i = 0; i < num_items; i++)
-        {
-            vals[i] = i;
-            tpool_add_work(tm, worker, vals + i);
-        }
+    tpool_add_work(tm, read_directory, path);
 
-        tpool_wait(tm);
+    tpool_wait(tm);
 
-        for (i = 0; i < num_items; i++)
-        {
-            printf("%d ", vals[i]);
-        }
-        printf("\n");
-
-        free(vals);
-
-        */
-    // tpool_destroy(tm);
+    tpool_destroy(tm);
     return 0;
 }
