@@ -12,7 +12,7 @@
 #include "threadpool.h"
 
 tpool_t *tm;
-static const size_t num_threads = 20;
+static const size_t num_threads = 200;
 pthread_mutex_t mutex_lock;
 
 struct tuple
@@ -74,7 +74,7 @@ void read_directory(void *arg)
 
     while ((entry = readdir(directory)) != NULL)
     {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || strcmp(entry->d_name, ".git") == 0 || strcmp(entry->d_name, ".vscode") == 0 || strcmp(entry->d_name, "files") == 0)
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || strcmp(entry->d_name, ".git") == 0 || strcmp(entry->d_name, ".vscode") == 0 || strcmp(entry->d_name, "images") == 0)
         {
             continue;
         }
@@ -131,7 +131,7 @@ int main()
     tuple_t *data = (tuple_t *)malloc(sizeof(tuple_t));
 
     char *path = (char *)malloc(1024 * sizeof(char));
-    strcpy(path, "/mnt/d/Development/Languages/C/FileCompression");
+    strcpy(path, "/mnt/d/Development/Projects/Double");
     data->path = path;
 
     int *lineCount = (int *)malloc(sizeof(int));
