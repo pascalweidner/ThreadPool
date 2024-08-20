@@ -13,25 +13,51 @@
 
 tpool_t *tm;
 static const size_t num_threads = 20;
+pthread_mutex_t mutex_lock;
 
-void worker(void *arg)
+struct tuple
 {
-    int *val = arg;
-    int old = *val;
+    char *path;
+    int *lineCount;
+};
+typedef struct tuple tuple_t;
 
-    *val += 1000;
-    printf("tid=%p, old=%d, val=%d\n", (void *)pthread_self(), old, *val);
+// arg needs to be a heap allocated variable as it will be freed
+void count_lines(void *arg)
+{
+    tuple_t *data = (tuple_t *)arg;
+    char *path = data->path;
 
-    if (*val % 2)
-        usleep(100000);
+    int count = 1;
+
+    FILE *fptr = fopen(path, "r");
+    while (!feof(fptr))
+    {
+        int val = fgetc(fptr);
+        if (val == '\n')
+        {
+            count++;
+        }
+    }
+
+    printf("File: %s: %d\n", path, count);
+
+    int *lineCount = data->lineCount;
+
+    pthread_mutex_lock(&(mutex_lock));
+    *lineCount += count;
+    pthread_mutex_unlock(&(mutex_lock));
+
+    free(path);
+    free(arg);
+    fclose(fptr);
 }
 
 // arg needs to be a heap allocated variable as it will be freed
 void read_directory(void *arg)
 {
-    char *path = (char *)malloc(strlen((char *)arg) * sizeof(char));
-    strcpy(path, (char *)arg);
-    free(arg);
+    tuple_t *data = (tuple_t *)arg;
+    char *path = data->path;
 
     DIR *directory = opendir(path);
     if (directory == NULL)
@@ -48,7 +74,7 @@ void read_directory(void *arg)
 
     while ((entry = readdir(directory)) != NULL)
     {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || strcmp(entry->d_name, ".git") == 0 || strcmp(entry->d_name, ".vscode") == 0)
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || strcmp(entry->d_name, ".git") == 0 || strcmp(entry->d_name, ".vscode") == 0 || strcmp(entry->d_name, "files") == 0)
         {
             continue;
         }
@@ -66,17 +92,32 @@ void read_directory(void *arg)
         {
             printf("Directory: %s\n", full_path);
 
+            tuple_t *d = (tuple_t *)malloc(sizeof(tuple_t));
+
             char *p = (char *)malloc(1024 * sizeof(char));
             strcpy(p, full_path);
-            tpool_add_work(tm, read_directory, p);
+
+            d->path = p;
+            d->lineCount = data->lineCount;
+
+            tpool_add_work(tm, read_directory, d);
         }
         else
         {
-            printf("File: %s\n", full_path);
+            tuple_t *d = (tuple_t *)malloc(sizeof(tuple_t));
+
+            char *p = (char *)malloc(1024 * sizeof(char));
+            strcpy(p, full_path);
+
+            d->path = p;
+            d->lineCount = data->lineCount;
+
+            tpool_add_work(tm, count_lines, d);
         }
     }
 
     free(path);
+    free(arg);
     closedir(directory);
 }
 
@@ -85,13 +126,26 @@ int main()
     // initialize threadpool
     tm = tpool_create(num_threads);
 
+    pthread_mutex_init(&(mutex_lock), NULL);
+
+    tuple_t *data = (tuple_t *)malloc(sizeof(tuple_t));
+
     char *path = (char *)malloc(1024 * sizeof(char));
     strcpy(path, "/mnt/d/Development/Languages/C/FileCompression");
+    data->path = path;
 
-    tpool_add_work(tm, read_directory, path);
+    int *lineCount = (int *)malloc(sizeof(int));
+    data->lineCount = lineCount;
+
+    tpool_add_work(tm, read_directory, data);
 
     tpool_wait(tm);
 
+    printf("Lines: %d\n", *lineCount);
+
+    free(lineCount);
+
     tpool_destroy(tm);
+    pthread_mutex_destroy(&(mutex_lock));
     return 0;
 }
